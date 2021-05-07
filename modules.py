@@ -1,4 +1,5 @@
 from retry import *
+from exit_after import *
 from dotenv import load_dotenv
 import os
 from os.path import join, dirname
@@ -45,6 +46,7 @@ class Order:
     tipFee: float
     expiry: float
     reduceOnly: bool
+    tries: int
 
     def __str__(self):
         disprice = 0
@@ -70,6 +72,7 @@ class Order:
         self.expiry = expiry
         self.reduceOnly = reduceOnly
         self.stillValid = stillValid
+        self.tries = 0
 
 
 dotenv_path = join(dirname(__file__), '.env')
@@ -105,13 +108,14 @@ else:
 
 APEX_SUBGRAPH = "https://api.thegraph.com/subgraphs/name/abdullathedruid/apex-keeper"
 PERP_SUBGRAPH = "https://api.thegraph.com/subgraphs/name/perpetual-protocol/perp-position-subgraph"
+PERP_LIMIT_SUBGRAPH = "https://api.thegraph.com/subgraphs/name/abdullathedruid/perp-limit"
 
 @retry(Exception)
 def get_orders():
     global orders
     query = """
     {
-      orders(first: 1000, orderBy: tipFee, orderDirection:desc, where:{filled:false, stillValid:true, expiry_gt:"%s"}) {
+      orders(first: 1000, orderBy: tipFee, orderDirection:desc, where:{filled:false, stillValid:true}) {
         id
         trader
         asset
@@ -127,7 +131,7 @@ def get_orders():
         reduceOnly
         stillValid
       }
-    }""" % (int(time.time()))
+    }"""
     resp = requests.post(APEX_SUBGRAPH, json={"query":query})
     data = resp.json()
     orders = []
@@ -168,6 +172,55 @@ def get_balances():
     resp = requests.post(APEX_SUBGRAPH, json={"query": query})
     data = resp.json()
     account_balances = data["data"]["smartWallets"]
+
+@retry(Exception)
+def get_trailing_orders():
+    global trailing_orders
+    #Will need updating when > 1000 trailing orders
+    query = """
+    {
+    trailingOrders(first: 1000) {
+    id
+    witnessPrice
+    snapshotTimestamp
+    snapshotCreated
+    snapshotLastUpdated
+      }
+    }
+    """
+    resp = requests.post(APEX_SUBGRAPH, json={"query": query})
+    data = resp.json()
+    trailing_orders = data['data']['trailingOrders']
+
+@retry(Exception)
+def get_trigger_update(order_id):
+    print('trigger update for',order_id)
+    global orders
+    order = next((ord for ord in orders if ord.orderId == order_id),'None')
+    trail_order = next((to for to in trailing_orders if to['id'] == str(order_id)))
+    if order != 'None':
+        trail_order = next((to for to in trailing_orders if to['id'] == str(order_id)))
+        amm = order.asset.address
+        RI = trail_order['snapshotLastUpdated']
+        price = trail_order['witnessPrice']
+        q = '{reserveSnapshottedEvents(first: 1,orderBy: price, orderDirection: asc, where:{amm:"%s", reserveIndex_gt: "%s", price_lte: "%s"})' % (amm,RI,price) if order.orderSize > 0 else '{reserveSnapshottedEvents(first: 1,orderBy: price, orderDirection: desc, where:{amm:"%s", reserveIndex_gt: "%s", price_gte: "%s"})' % (amm,RI,price)
+        q = q + '''{
+        id
+        amm
+        blockNumber
+        blockTimestamp
+        reserveIndex
+        price
+        }
+        }'''
+        resp = requests.post(PERP_LIMIT_SUBGRAPH, json={"query": q})
+        data = resp.json()
+        if len(data["data"]["reserveSnapshottedEvents"]) > 0:
+            reserve_index = data["data"]["reserveSnapshottedEvents"][0]["reserveIndex"]
+            print('poke at',reserve_index)
+            poke_order(order_id, reserve_index)
+    else:
+        pass
 
 def can_be_executed(order):
     global account_balances
@@ -217,12 +270,19 @@ def can_be_executed(order):
         else:
             return False
 
+
+
     return True
 
 def execute_order(order_id):
     print('Executing order %s' % order_id)
     send_tx(LOB.functions.execute(order_id))
 
+def poke_order(order_id,reserve_index):
+    print('Poking order %s with %s' % (order_id,reserve_index))
+    send_tx(LOB.functions.pokeContract(order_id,int(reserve_index)))
+
+@exit_after(60)
 def send_tx(fn):
     nonce = w3.eth.getTransactionCount(account.address)
     tx = fn.buildTransaction({
@@ -242,7 +302,7 @@ def send_tx(fn):
     if success:
         print('Transaction confirmed - Block: %s   Gas used: %s' % (tx_receipt['blockNumber'], tx_receipt['gasUsed']))
     else:
-        print('oh no')
+        print('Transaction failed')
     return success
 
 
@@ -253,3 +313,6 @@ def loop():
     for order in orders:
         if can_be_executed(order):
             execute_order(order.orderId)
+    get_trailing_orders()
+    for to in trailing_orders:
+        get_trigger_update(int(to['id']))
