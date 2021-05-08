@@ -1,12 +1,12 @@
 # chronos_bot
 
-Please create virtual environment
+Please create virtual environment sir
 `python3 -m venv bot`
 
-Please activate virtual environment
+Please activate virtual environment sir
 `source bot/bin/activate`
 
-Install libraries
+Install libraries sir
 `pip3 install -r requirements.txt`
 
 Set up env variables as follows by creating a .env file:
