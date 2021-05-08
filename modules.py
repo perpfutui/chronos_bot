@@ -6,6 +6,7 @@ from os.path import join, dirname
 from web3 import Web3
 from eth_account import Account
 import time
+import datetime
 import json
 import requests
 import urllib
@@ -200,25 +201,29 @@ def get_trigger_update(order_id):
     trail_order = next((to for to in trailing_orders if to['id'] == str(order_id)))
     if order != 'None':
         trail_order = next((to for to in trailing_orders if to['id'] == str(order_id)))
-        amm = order.asset.address
-        RI = trail_order['snapshotLastUpdated']
-        price = trail_order['witnessPrice']
-        q = '{reserveSnapshottedEvents(first: 1,orderBy: price, orderDirection: asc, where:{amm:"%s", reserveIndex_gt: "%s", price_lte: "%s"})' % (amm,RI,price) if order.orderSize > 0 else '{reserveSnapshottedEvents(first: 1,orderBy: price, orderDirection: desc, where:{amm:"%s", reserveIndex_gt: "%s", price_gte: "%s"})' % (amm,RI,price)
-        q = q + '''{
-        id
-        amm
-        blockNumber
-        blockTimestamp
-        reserveIndex
-        price
-        }
-        }'''
-        resp = requests.post(PERP_LIMIT_SUBGRAPH, json={"query": q})
-        data = resp.json()
-        if len(data["data"]["reserveSnapshottedEvents"]) > 0:
-            reserve_index = data["data"]["reserveSnapshottedEvents"][0]["reserveIndex"]
-            print('poke at',reserve_index)
-            poke_order(order_id, reserve_index)
+        last_updated = trail_order['snapshotLastUpdated']
+        if (int(last_updated)+15*60) < time.time():
+            amm = order.asset.address
+            RI = trail_order['snapshotLastUpdated']
+            price = trail_order['witnessPrice']
+            q = '{reserveSnapshottedEvents(first: 1,orderBy: price, orderDirection: asc, where:{amm:"%s", reserveIndex_gt: "%s", price_lte: "%s"})' % (amm,RI,price) if order.orderSize > 0 else '{reserveSnapshottedEvents(first: 1,orderBy: price, orderDirection: desc, where:{amm:"%s", reserveIndex_gt: "%s", price_gte: "%s"})' % (amm,RI,price)
+            q = q + '''{
+            id
+            amm
+            blockNumber
+            blockTimestamp
+            reserveIndex
+            price
+            }
+            }'''
+            resp = requests.post(PERP_LIMIT_SUBGRAPH, json={"query": q})
+            data = resp.json()
+            if len(data["data"]["reserveSnapshottedEvents"]) > 0:
+                reserve_index = data["data"]["reserveSnapshottedEvents"][0]["reserveIndex"]
+                print('poke at',reserve_index)
+                poke_order(order_id, reserve_index)
+        else:
+            pass
     else:
         pass
 
@@ -311,6 +316,7 @@ timer = -1
 def loop():
     global timer
     timer += 1
+    print('Looping at',datetime.datetime.now())
     get_prices()
     get_balances()
     get_orders()
