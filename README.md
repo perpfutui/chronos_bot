@@ -15,5 +15,8 @@ Set up env variables as follows by creating a .env file:
 
 `PRIVATE_KEY=YOURPRIVATEKEYGOESHERE`
 
+Update permissions:
+`chmod +x forever.py`
+
 Run the bot in command line:
 `./forever.py app.py`

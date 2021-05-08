@@ -81,8 +81,9 @@ NODE_URL = os.environ.get('NODE_URL','wss://rpc.xdaichain.com/wss')
 PRIVATE_KEY = os.environ.get('PRIVATE_KEY')
 
 w3 = Web3(Web3.WebsocketProvider(NODE_URL, websocket_timeout=120, websocket_kwargs = {"ping_interval":None}))
-
 account = Account.from_key(PRIVATE_KEY)
+
+TRIGGER_LOOP = 30
 
 #Get all AMMs
 def get_amms():
@@ -194,7 +195,6 @@ def get_trailing_orders():
 
 @retry(Exception)
 def get_trigger_update(order_id):
-    print('trigger update for',order_id)
     global orders
     order = next((ord for ord in orders if ord.orderId == order_id),'None')
     trail_order = next((to for to in trailing_orders if to['id'] == str(order_id)))
@@ -306,13 +306,18 @@ def send_tx(fn):
     return success
 
 
+timer = -1
+
 def loop():
+    global timer
+    timer += 1
     get_prices()
     get_balances()
     get_orders()
     for order in orders:
         if can_be_executed(order):
             execute_order(order.orderId)
-    get_trailing_orders()
-    for to in trailing_orders:
-        get_trigger_update(int(to['id']))
+    if timer % TRIGGER_LOOP == 0:
+        get_trailing_orders()
+        for to in trailing_orders:
+            get_trigger_update(int(to['id']))
