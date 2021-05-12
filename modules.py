@@ -294,7 +294,7 @@ def send_tx(fn):
         'from': account.address,
         'nonce': nonce,
         'value': 0,
-        'gasPrice': w3.toWei('1','gwei'),
+        'gasPrice': w3.toWei('2','gwei'),
     })
     estimate = int(1.1*w3.eth.estimate_gas(tx))
     tx['gas']=estimate
