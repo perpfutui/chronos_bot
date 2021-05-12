@@ -1,11 +1,5 @@
 # chronos_bot
 
-Please create virtual environment sir
-`python3 -m venv bot`
-
-Please activate virtual environment sir
-`source bot/bin/activate`
-
 Install libraries sir
 `pip3 install -r requirements.txt`
 
@@ -20,3 +14,7 @@ Update permissions:
 
 Run the bot in command line:
 `./forever.py app.py`
+
+???
+
+Profit
