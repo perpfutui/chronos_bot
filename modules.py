@@ -3,7 +3,8 @@ from exit_after import *
 from dotenv import load_dotenv
 import os
 from os.path import join, dirname
-from web3 import Web3
+from web3 import Web3, middleware
+from web3.gas_strategies.time_based import fast_gas_price_strategy
 from eth_account import Account
 import time
 import datetime
@@ -83,6 +84,11 @@ PRIVATE_KEY = os.environ.get('PRIVATE_KEY')
 
 w3 = Web3(Web3.WebsocketProvider(NODE_URL, websocket_timeout=120, websocket_kwargs = {"ping_interval":None}))
 account = Account.from_key(PRIVATE_KEY)
+w3.eth.set_gas_price_strategy(fast_gas_price_strategy)
+
+w3.middleware_onion.add(middleware.time_based_cache_middleware)
+w3.middleware_onion.add(middleware.latest_block_based_cache_middleware)
+w3.middleware_onion.add(middleware.simple_cache_middleware)
 
 TRIGGER_LOOP = 30
 
@@ -294,14 +300,13 @@ def send_tx(fn):
         'from': account.address,
         'nonce': nonce,
         'value': 0,
-        'gasPrice': w3.toWei('1','gwei'),
     })
-    print(nonce)
-    estimate = int(1.1*w3.eth.estimate_gas(tx))
+    estimate = int(1.25*w3.eth.estimate_gas(tx))
     tx['gas']=estimate
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
+    hash = w3.toHex(w3.keccak(signed_tx.rawTransaction))
     result = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-    print('Transaction sent: %s' % w3.toHex(w3.keccak(signed_tx.rawTransaction)))
+    print('Transaction sent: %s' % hash)
     print('Waiting for confirmation...')
     tx_receipt = w3.eth.wait_for_transaction_receipt(result)
     success = bool(tx_receipt['status'])
