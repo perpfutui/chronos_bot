@@ -92,6 +92,17 @@ w3.middleware_onion.add(middleware.simple_cache_middleware)
 
 TRIGGER_LOOP = 30
 
+#pickle
+import jsonpickle
+def object_write(obj, path):
+    with open(path, "w") as f:
+        f.write(jsonpickle.encode(obj))
+
+def object_read(path):
+    with open(path, "r") as f:
+        encoded = f.read()
+    return jsonpickle.decode(encoded)
+
 #Get all AMMs
 def get_amms():
     output = []
@@ -293,8 +304,12 @@ def poke_order(order_id,reserve_index):
     print('Poking order %s with %s' % (order_id,reserve_index))
     send_tx(LOB.functions.pokeContract(order_id,int(reserve_index)))
 
-@exit_after(60)
+@exit_after(30)
 def send_tx(fn):
+    global globals
+    globals = object_read('pickle.data')
+    globals['gas_multiplier'] *= 1.25
+    object_write(globals,'pickle.data')
     nonce = w3.eth.getTransactionCount(account.address)
     tx = fn.buildTransaction({
         'from': account.address,
@@ -303,6 +318,7 @@ def send_tx(fn):
     })
     estimate = int(1.25*w3.eth.estimate_gas(tx))
     tx['gas']=estimate
+    tx['gasPrice'] = min(1000000000000, int(tx['gasPrice'] * globals['gas_multiplier'])) #max 1000 gwei
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
     hash = w3.toHex(w3.keccak(signed_tx.rawTransaction))
     result = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
@@ -312,6 +328,8 @@ def send_tx(fn):
     success = bool(tx_receipt['status'])
     if success:
         print('Transaction confirmed - Block: %s   Gas used: %s' % (tx_receipt['blockNumber'], tx_receipt['gasUsed']))
+        globals['gas_multiplier'] = 1
+        object_write(globals,'pickle.data')
     else:
         print('Transaction failed')
     return success
@@ -320,7 +338,7 @@ def send_tx(fn):
 timer = -1
 
 def loop():
-    global timer
+    global timer, globals
     timer += 1
     print('Looping at',datetime.datetime.now())
     get_prices()
