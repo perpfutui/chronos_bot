@@ -237,8 +237,6 @@ def get_trigger_update(order_id):
             data = resp.json()
             if len(data["data"]["reserveSnapshottedEvents"]) > 0:
                 reserve_index = data["data"]["reserveSnapshottedEvents"][0]["reserveIndex"]
-                print('poke at',reserve_index)
-                print(int(last_updated)+10*60, time.time())
                 poke_order(order_id, reserve_index,order.tipFee/2)
         else:
             pass
@@ -305,21 +303,25 @@ def poke_order(order_id,reserve_index, maxFee):
     print('Poking order %s with %s' % (order_id,reserve_index))
     send_tx(LOB.functions.pokeContract(order_id,int(reserve_index)),maxFee)
 
-@exit_after(30)
+@exit_after(60)
 def send_tx(fn, maxFee=0.01):
     global globals
     globals = object_read('pickle.data')
     globals['gas_multiplier'] *= 1.25
+    print(1)
     object_write(globals,'pickle.data')
+    print(2)
     nonce = w3.eth.getTransactionCount(account.address)
+    print(3)
     tx = fn.buildTransaction({
         'from': account.address,
         'nonce': nonce,
         'value': 0,
     })
+    print(4)
     estimate = int(1.25*w3.eth.estimate_gas(tx))
     tx['gas']=estimate
-    MAX_ALLOWED_COST = maxFee * 666 #assume gasLimit of 1.5M
+    MAX_ALLOWED_COST = int(maxFee * 666 * 1e9)#assume gasLimit of 1.5M
     tx['gasPrice'] = min(MAX_ALLOWED_COST, int(tx['gasPrice'] * globals['gas_multiplier'])) #max tx cost less than bot fee
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
     hash = w3.toHex(w3.keccak(signed_tx.rawTransaction))
