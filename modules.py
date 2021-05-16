@@ -218,8 +218,8 @@ def get_trigger_update(order_id):
     trail_order = next((to for to in trailing_orders if to['id'] == str(order_id)))
     if order != 'None':
         trail_order = next((to for to in trailing_orders if to['id'] == str(order_id)))
-        last_updated = trail_order['snapshotLastUpdated']
-        if (int(last_updated)+15*60) < time.time():
+        last_updated = trail_order['snapshotTimestamp']
+        if (int(last_updated)+10*60) < time.time():
             amm = order.asset.address
             RI = trail_order['snapshotLastUpdated']
             price = trail_order['witnessPrice']
@@ -238,7 +238,8 @@ def get_trigger_update(order_id):
             if len(data["data"]["reserveSnapshottedEvents"]) > 0:
                 reserve_index = data["data"]["reserveSnapshottedEvents"][0]["reserveIndex"]
                 print('poke at',reserve_index)
-                poke_order(order_id, reserve_index)
+                print(int(last_updated)+10*60, time.time())
+                poke_order(order_id, reserve_index,order.tipFee/2)
         else:
             pass
     else:
@@ -296,16 +297,16 @@ def can_be_executed(order):
 
     return True
 
-def execute_order(order_id):
+def execute_order(order_id, maxFee):
     print('Executing order %s' % order_id)
-    send_tx(LOB.functions.execute(order_id))
+    send_tx(LOB.functions.execute(order_id),maxFee)
 
-def poke_order(order_id,reserve_index):
+def poke_order(order_id,reserve_index, maxFee):
     print('Poking order %s with %s' % (order_id,reserve_index))
-    send_tx(LOB.functions.pokeContract(order_id,int(reserve_index)))
+    send_tx(LOB.functions.pokeContract(order_id,int(reserve_index)),maxFee)
 
 @exit_after(30)
-def send_tx(fn):
+def send_tx(fn, maxFee=0.01):
     global globals
     globals = object_read('pickle.data')
     globals['gas_multiplier'] *= 1.25
@@ -318,7 +319,8 @@ def send_tx(fn):
     })
     estimate = int(1.25*w3.eth.estimate_gas(tx))
     tx['gas']=estimate
-    tx['gasPrice'] = min(1000000000000, int(tx['gasPrice'] * globals['gas_multiplier'])) #max 1000 gwei
+    MAX_ALLOWED_COST = maxFee * 666 #assume gasLimit of 1.5M
+    tx['gasPrice'] = min(MAX_ALLOWED_COST, int(tx['gasPrice'] * globals['gas_multiplier'])) #max tx cost less than bot fee
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
     hash = w3.toHex(w3.keccak(signed_tx.rawTransaction))
     result = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
@@ -346,7 +348,7 @@ def loop():
     get_orders()
     for order in orders:
         if can_be_executed(order):
-            execute_order(order.orderId)
+            execute_order(order.orderId,order.tipFee)
     if timer % TRIGGER_LOOP == 0:
         get_trailing_orders()
         for to in trailing_orders:
