@@ -303,22 +303,18 @@ def poke_order(order_id,reserve_index, maxFee):
     print('Poking order %s with %s' % (order_id,reserve_index))
     send_tx(LOB.functions.pokeContract(order_id,int(reserve_index)),maxFee)
 
-@exit_after(60)
+@exit_after(30)
 def send_tx(fn, maxFee=0.01):
     global globals
     globals = object_read('pickle.data')
     globals['gas_multiplier'] *= 1.25
-    print(1)
     object_write(globals,'pickle.data')
-    print(2)
     nonce = w3.eth.getTransactionCount(account.address)
-    print(3)
     tx = fn.buildTransaction({
         'from': account.address,
         'nonce': nonce,
         'value': 0,
     })
-    print(4)
     estimate = int(1.25*w3.eth.estimate_gas(tx))
     tx['gas']=estimate
     MAX_ALLOWED_COST = int(maxFee * 666 * 1e9)#assume gasLimit of 1.5M
