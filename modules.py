@@ -271,16 +271,16 @@ def can_be_executed(order):
         currentSize = int([ass['positionSize'] for ass in account['ammPositions'] if ass['amm'] == order.asset.address.lower()][0])/1e18
         exchangedSize = order.orderSize
         newSize = currentSize + exchangedSize
-        # currentMargin = int([ass['currentMargin'] for ass in account['ammPositions'] if ass['amm'] == order.asset.address.lower()][0])/1e18
 
         if isPos(currentSize) == isPos(exchangedSize): #this order will increase size of position
             return False
 
         if abs(exchangedSize) > abs(currentSize): #this is a close + open reverse order
-            # newCollateralNeeded = order.collateral - 2*currentMargin
-            # if newCollateralNeeded > trader_account_balance:
-            #     return False
-            pass
+            newCollateralNeeded = order.collateral*(abs(exchangedSize) - 2*abs(currentSize))/abs(exchangedSize)
+            if newCollateralNeeded < 0:
+                newCollateralNeeded = 0
+            if newCollateralNeeded > trader_account_balance:
+                return False
 
         else: #this is reduce order -> should always be able to happen
             pass
