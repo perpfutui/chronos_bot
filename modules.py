@@ -186,6 +186,10 @@ def get_balances():
         id
         owner
         balance
+        ammPositions {
+          amm
+          positionSize
+        }
       }
     }"""
     resp = requests.post(APEX_SUBGRAPH, json={"query": query})
@@ -243,6 +247,13 @@ def get_trigger_update(order_id):
     else:
         pass
 
+def isPos(num):
+    if num>=0:
+        return True
+    elif num<0:
+        return False
+
+
 def can_be_executed(order):
     global account_balances
 
@@ -252,10 +263,27 @@ def can_be_executed(order):
     if int(order.expiry) < time.time() and int(order.expiry)!=0:
         return False
 
-    trader_account_balance = int([account['balance'] for account in account_balances if account['owner'] == order.trader][0])
 
-    if order.collateral > (trader_account_balance/1e6):
-        return False
+    account = [account for account in account_balances if account['owner'] == order.trader][0]
+    trader_account_balance = int(account['balance'])/1e6
+
+    if order.collateral > trader_account_balance: #the user does not have enough money for the order outright so first check if its a reduce order
+        currentSize = int([ass['positionSize'] for ass in account['ammPositions'] if ass['amm'] == order.asset.address.lower()][0])/1e18
+        exchangedSize = order.orderSize
+        newSize = currentSize + exchangedSize
+        # currentMargin = int([ass['currentMargin'] for ass in account['ammPositions'] if ass['amm'] == order.asset.address.lower()][0])/1e18
+
+        if isPos(currentSize) == isPos(exchangedSize): #this order will increase size of position
+            return False
+
+        if abs(exchangedSize) > abs(currentSize): #this is a close + open reverse order
+            # newCollateralNeeded = order.collateral - 2*currentMargin
+            # if newCollateralNeeded > trader_account_balance:
+            #     return False
+            pass
+
+        else: #this is reduce order -> should always be able to happen
+            pass
 
     if order.orderType == OrderType.LIMIT.value:
         if order.orderSize > 0: #limit buy
