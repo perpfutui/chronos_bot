@@ -3,8 +3,7 @@ from exit_after import *
 from dotenv import load_dotenv
 import os
 from os.path import join, dirname
-from web3 import Web3, middleware
-from web3.gas_strategies.time_based import fast_gas_price_strategy
+from web3 import Web3
 from eth_account import Account
 import time
 import datetime
@@ -13,6 +12,13 @@ import requests
 import urllib
 from enum import Enum
 import pandas as pd
+import random
+
+
+# VARIABLES HERE:
+RANDOMIZE = False
+DEFAULT_GAS_SPEED = 'average' #fast, average, slow
+ALLOW_UNPROFITABLE_TRANSACTION = False
 
 class Asset:
     name: str
@@ -49,6 +55,7 @@ class Order:
     expiry: float
     reduceOnly: bool
     tries: int
+    trailingData: dict
 
     def __str__(self):
         disprice = 0
@@ -59,7 +66,7 @@ class Order:
         return "Order [%s] %s %.5f %s @ $%.2f" % (self.orderId, 'BUY' if self.orderSize>0 else 'SELL', abs(self.orderSize), self.asset.name, disprice)
 
     def __init__(self, assets, id, trader, asset, limitPrice, stopPrice, orderSize, orderType,
-        collateral, leverage, slippage, tipFee, expiry, reduceOnly, stillValid):
+        collateral, leverage, slippage, tipFee, expiry, reduceOnly, stillValid, trailingData):
         self.orderId = int(id)
         self.trader = trader
         self.asset = next(x for x in assets if x.address.lower() == asset.lower())
@@ -75,6 +82,7 @@ class Order:
         self.reduceOnly = reduceOnly
         self.stillValid = stillValid
         self.tries = 0
+        self.trailingData = trailingData
 
 
 dotenv_path = join(dirname(__file__), '.env')
@@ -84,11 +92,6 @@ PRIVATE_KEY = os.environ.get('PRIVATE_KEY')
 
 w3 = Web3(Web3.WebsocketProvider(NODE_URL, websocket_timeout=120, websocket_kwargs = {"ping_interval":None}))
 account = Account.from_key(PRIVATE_KEY)
-w3.eth.set_gas_price_strategy(fast_gas_price_strategy)
-
-w3.middleware_onion.add(middleware.time_based_cache_middleware)
-w3.middleware_onion.add(middleware.latest_block_based_cache_middleware)
-w3.middleware_onion.add(middleware.simple_cache_middleware)
 
 TRIGGER_LOOP = 30
 
@@ -116,7 +119,7 @@ def get_amms():
 assets = get_amms()
 
 #Instantiate contracts:
-LOB = w3.eth.contract(address='0x02e7B722E178518Ae07a596A7cb5F88B313c453a', abi=json.load(open('abi/LimitOrderBook.abi.json','r')))
+LOB = w3.eth.contract(address='0x369287aD9acf4b872F4D6636446D834e73BD41Fd', abi=json.load(open('abi/LimitOrderBook.abi.json','r')))
 
 if w3.isConnected() == True:
     print("Connected with user %s" % account.address)
@@ -149,6 +152,13 @@ def get_orders():
         expiry
         reduceOnly
         stillValid
+        trailingData {
+            id
+            witnessPrice
+            snapshotTimestamp
+            snapshotCreated
+            snapshotLastUpdated
+        }
       }
     }"""
     resp = requests.post(APEX_SUBGRAPH, json={"query":query})
@@ -216,12 +226,9 @@ def get_trailing_orders():
     trailing_orders = data['data']['trailingOrders']
 
 @retry(Exception)
-def get_trigger_update(order_id):
-    global orders
-    order = next((ord for ord in orders if ord.orderId == order_id),'None')
-    trail_order = next((to for to in trailing_orders if to['id'] == str(order_id)))
+def get_trigger_update(order):
+    trail_order = order.trailingData
     if order != 'None':
-        trail_order = next((to for to in trailing_orders if to['id'] == str(order_id)))
         last_updated = trail_order['snapshotTimestamp']
         if (int(last_updated)+10*60) < time.time():
             amm = order.asset.address
@@ -241,7 +248,7 @@ def get_trigger_update(order_id):
             data = resp.json()
             if len(data["data"]["reserveSnapshottedEvents"]) > 0:
                 reserve_index = data["data"]["reserveSnapshottedEvents"][0]["reserveIndex"]
-                poke_order(order_id, reserve_index,order.tipFee/2)
+                poke_order(order.orderId, reserve_index,order.tipFee/2)
         else:
             pass
     else:
@@ -319,7 +326,8 @@ def can_be_executed(order):
         else:
             return False
 
-
+    if order.orderId == 275:
+        return False
 
     return True
 
@@ -333,6 +341,7 @@ def poke_order(order_id,reserve_index, maxFee):
 
 @exit_after(30)
 def send_tx(fn, maxFee=0.01):
+    gasprices = requests.get("https://blockscout.com/xdai/mainnet/api/v1/gas-price-oracle").json()
     global globals
     globals = object_read('pickle.data')
     globals['gas_multiplier'] *= 1.25
@@ -344,8 +353,12 @@ def send_tx(fn, maxFee=0.01):
         'value': 0,
     })
     estimate = int(1.25*w3.eth.estimate_gas(tx))
+    tx['gasPrice'] = gasprices[DEFAULT_GAS_SPEED]*1e9
     tx['gas']=estimate
-    MAX_ALLOWED_COST = int(maxFee * 666 * 1e9)#assume gasLimit of 1.5M
+    if ALLOW_UNPROFITABLE_TRANSACTION:
+        MAX_ALLOWED_COST = 1000*1e9 #1000 gwei is max
+    else:
+        MAX_ALLOWED_COST = int(maxFee * 666 * 1e9)#assume gasLimit of 1.5M
     tx['gasPrice'] = min(MAX_ALLOWED_COST, int(tx['gasPrice'] * globals['gas_multiplier'])) #max tx cost less than bot fee
     signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
     hash = w3.toHex(w3.keccak(signed_tx.rawTransaction))
@@ -366,16 +379,16 @@ def send_tx(fn, maxFee=0.01):
 timer = -1
 
 def loop():
-    global timer, globals
+    global timer, globals, orders
     timer += 1
     print('Looping at',datetime.datetime.now())
     get_prices()
     get_balances()
     get_orders()
+    if RANDOMIZE:
+        random.shuffle(orders)
     for order in orders:
         if can_be_executed(order):
             execute_order(order.orderId,order.tipFee)
-    if timer % TRIGGER_LOOP == 0:
-        get_trailing_orders()
-        for to in trailing_orders:
-            get_trigger_update(int(to['id']))
+        if timer % TRIGGER_LOOP == 0 and order.trailingData:
+            get_trigger_update(order)
