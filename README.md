@@ -1,4 +1,7 @@
 # chronos_bot
+Keeper bot for trade.apex.win
+
+## Installation
 
 Install libraries sir
 `pip3 install -r requirements.txt`
