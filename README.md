@@ -1,5 +1,7 @@
 # chronos_bot
-Keeper bot for trade.apex.win
+Keeper bot for trade.apex.win 
+
+Read more about our project [here](https://docs.apex.win/apex-docs/).
 
 ## Installation
 
