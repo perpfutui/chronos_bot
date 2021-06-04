@@ -275,7 +275,7 @@ def can_be_executed(order):
     trader_account_balance = int(account['balance'])/1e6
 
     if order.collateral > trader_account_balance: #the user does not have enough money for the order outright so first check if its a reduce order
-        currentSize = int([ass['positionSize'] for ass in account['ammPositions'] if ass['amm'] == order.asset.address.lower()][0])/1e18
+        currentSize = int([ass['positionSize'] if ass['amm'] == order.asset.address.lower() else 0 for ass in account['ammPositions']][0])/1e18
         exchangedSize = order.orderSize
         newSize = currentSize + exchangedSize
 
