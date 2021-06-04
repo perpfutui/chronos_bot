@@ -344,7 +344,7 @@ def send_tx(fn, maxFee=0.01):
     gasprices = requests.get("https://blockscout.com/xdai/mainnet/api/v1/gas-price-oracle").json()
     global globals
     globals = object_read('pickle.data')
-    globals['gas_multiplier'] *= 1.25
+    globals['gas_multiplier'] = min(globals['gas_multiplier'] * 1.25, 1000)
     object_write(globals,'pickle.data')
     nonce = w3.eth.getTransactionCount(account.address)
     tx = fn.buildTransaction({
