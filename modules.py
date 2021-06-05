@@ -180,7 +180,7 @@ def get_prices():
     resp = requests.post(PERP_SUBGRAPH, json={"query": query})
     data = resp.json()
     for amm in data["data"]["amms"]:
-        ass = next((asset for asset in assets if amm["address"] == asset.address.lower() ),"didnt find lol")
+        ass = next((asset for asset in assets if amm["address"].lower() == asset.address.lower() ),"didnt find lol")
         if float(amm["baseAssetReserve"])>0 :
             ass.price = float(amm["quoteAssetReserve"])/float(amm["baseAssetReserve"])
         else:
@@ -275,7 +275,7 @@ def can_be_executed(order):
     trader_account_balance = int(account['balance'])/1e6
 
     if order.collateral > trader_account_balance: #the user does not have enough money for the order outright so first check if its a reduce order
-        currentSize = int([ass['positionSize'] if ass['amm'] == order.asset.address.lower() else 0 for ass in account['ammPositions']][0])/1e18
+        currentSize = int([ass['positionSize'] if ass['amm'].lower() == order.asset.address.lower() else 0 for ass in account['ammPositions']][0])/1e18
         exchangedSize = order.orderSize
         newSize = currentSize + exchangedSize
 
