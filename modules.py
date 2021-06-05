@@ -292,6 +292,14 @@ def can_be_executed(order):
         else: #this is reduce order -> should always be able to happen
             pass
 
+    if order.reduceOnly:
+        currentSize = int([ass['positionSize'] if ass['amm'].lower() == order.asset.address.lower() else 0 for ass in account['ammPositions']][0])/1e18
+        exchangedSize = order.orderSize
+        if isPos(currentSize) == isPos(exchangedSize): #this order will increase size of position
+            return False
+        if currentSize == 0:
+            return False
+
     if order.orderType == OrderType.LIMIT.value:
         if order.orderSize > 0: #limit buy
             if order.asset.price > order.limitPrice:
