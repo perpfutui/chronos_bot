@@ -263,11 +263,15 @@ def isPos(num):
 
 def can_be_executed(order):
     global account_balances
-    
+
     account = [account for account in account_balances if account['owner'] == order.trader][0]
     exchangedSize = order.orderSize
-    currentSize = int([ass['positionSize'] if ass['amm'].lower() == order.asset.address.lower() else 0 for ass in account['ammPositions']][0])/1e18
     trader_account_balance = int(account['balance'])/1e6
+    currentSize = 0
+    for ass in account['ammPositions']:
+        if ass['amm'].lower() == order.asset.address.lower():
+            currentSize = float(ass['positionSize'])/1e18
+
 
     if order.stillValid == False:
         return False
