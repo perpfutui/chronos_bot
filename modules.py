@@ -280,22 +280,11 @@ def can_be_executed(order):
     if int(order.expiry) < time.time() and int(order.expiry)!=0:
         return False
 
-<<<<<<< HEAD
-
-    account = [account for account in account_balances if account['owner'] == order.trader][0]
-    trader_account_balance = float(account['balance'])/1e6
-
-    currentSize = 0
-    for ass in account['ammPositions']:
-        if ass['amm'].lower() == order.asset.address.lower():
-            currentSize = float(ass['positionSize'])/1e18
-=======
     if order.reduceOnly:
         if isPos(exchangedSize):
             exchangedSize = min(exchangedSize, -currentSize)
         else:
             exchangedSize = max(exchangedSize, -currentSize)
->>>>>>> 5ed7745ab65e49935c1fc4094dda8b130939c683
 
     if order.collateral > trader_account_balance: #the user does not have enough money for the order outright so first check if its a reduce order
         newSize = currentSize + exchangedSize
@@ -353,10 +342,7 @@ def can_be_executed(order):
         else:
             return False
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 5ed7745ab65e49935c1fc4094dda8b130939c683
     return True
 
 def execute_order(order_id, maxFee):
