@@ -184,7 +184,8 @@ def get_prices():
         if float(amm["baseAssetReserve"])>0 :
             ass.price = float(amm["quoteAssetReserve"])/float(amm["baseAssetReserve"])
         else:
-            pass
+            contract = w3.eth.contract(address=w3.toChecksumAddress(amm['address']), abi=json.load(open('abi/AMM.abi.json','r')))
+            ass.price = float(contract.functions.getSpotPrice().call()[0])/1e18
             #need to get price from contract
 
 @retry(Exception)
@@ -274,7 +275,7 @@ def can_be_executed(order):
 
 
     account = [account for account in account_balances if account['owner'] == order.trader][0]
-    trader_account_balance = int(account['balance'])/1e6
+    trader_account_balance = float(account['balance'])/1e6
 
     currentSize = 0
     for ass in account['ammPositions']:
@@ -339,9 +340,6 @@ def can_be_executed(order):
                 return False
         else:
             return False
-
-    if order.orderId == 275:
-        return False
 
     return True
 
