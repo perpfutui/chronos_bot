@@ -263,6 +263,11 @@ def isPos(num):
 
 def can_be_executed(order):
     global account_balances
+    
+    account = [account for account in account_balances if account['owner'] == order.trader][0]
+    exchangedSize = order.orderSize
+    currentSize = int([ass['positionSize'] if ass['amm'].lower() == order.asset.address.lower() else 0 for ass in account['ammPositions']][0])/1e18
+    trader_account_balance = int(account['balance'])/1e6
 
     if order.stillValid == False:
         return False
@@ -270,13 +275,13 @@ def can_be_executed(order):
     if int(order.expiry) < time.time() and int(order.expiry)!=0:
         return False
 
-
-    account = [account for account in account_balances if account['owner'] == order.trader][0]
-    trader_account_balance = int(account['balance'])/1e6
+    if order.reduceOnly:
+        if isPos(exchangedSize):
+            exchangedSize = min(exchangedSize, -currentSize)
+        else:
+            exchangedSize = max(exchangedSize, -currentSize)
 
     if order.collateral > trader_account_balance: #the user does not have enough money for the order outright so first check if its a reduce order
-        currentSize = int([ass['positionSize'] if ass['amm'].lower() == order.asset.address.lower() else 0 for ass in account['ammPositions']][0])/1e18
-        exchangedSize = order.orderSize
         newSize = currentSize + exchangedSize
 
         if isPos(currentSize) == isPos(exchangedSize): #this order will increase size of position
@@ -293,8 +298,6 @@ def can_be_executed(order):
             pass
 
     if order.reduceOnly:
-        currentSize = int([ass['positionSize'] if ass['amm'].lower() == order.asset.address.lower() else 0 for ass in account['ammPositions']][0])/1e18
-        exchangedSize = order.orderSize
         if isPos(currentSize) == isPos(exchangedSize): #this order will increase size of position
             return False
         if currentSize == 0:
@@ -334,8 +337,6 @@ def can_be_executed(order):
         else:
             return False
 
-    if order.orderId == 275:
-        return False
 
     return True
 
