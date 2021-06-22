@@ -185,7 +185,8 @@ def get_prices():
             ass.price = float(amm["quoteAssetReserve"])/float(amm["baseAssetReserve"])
         else:
             contract = w3.eth.contract(address=w3.toChecksumAddress(amm['address']), abi=json.load(open('abi/AMM.abi.json','r')))
-            ass.price = float(contract.functions.getSpotPrice().call()[0])/1e18
+            if ass != "didnt find lol":
+                ass.price = float(contract.functions.getSpotPrice().call()[0])/1e18
             #need to get price from contract
 
 @retry(Exception)
@@ -281,6 +282,8 @@ def can_be_executed(order):
         return False
 
     if order.reduceOnly:
+        if isPos(currentSize) == isPos(exchangedSize): #this order will increase size of position
+            return False
         if isPos(exchangedSize):
             exchangedSize = min(exchangedSize, -currentSize)
         else:
@@ -341,7 +344,6 @@ def can_be_executed(order):
                 return False
         else:
             return False
-
 
     return True
 

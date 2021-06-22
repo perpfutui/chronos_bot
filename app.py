@@ -3,4 +3,4 @@ from modules import *
 
 while True:
     loop()
-    time.sleep(5)
+    time.sleep(15)
